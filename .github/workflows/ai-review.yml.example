@@ -1,0 +1,43 @@
+name: On-demand AI PR Review
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  check-command:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    permissions: {}
+    outputs:
+      accepted: ${{ steps.command.outputs.accepted }}
+    steps:
+      - name: Check exact manual command
+        id: command
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+          $accepted = $false
+          if ([string]::Equals($env:GITHUB_EVENT_NAME, 'issue_comment', [StringComparison]::Ordinal) -and
+              [string]::Equals($event.action, 'created', [StringComparison]::Ordinal) -and
+              $null -ne $event.issue.pull_request -and
+              [string]::Equals($event.comment.user.type, 'User', [StringComparison]::Ordinal) -and
+              $event.comment.body -is [string]) {
+            $accepted = [string]::Equals($event.comment.body.Trim(), '@company-code-reviewer review', [StringComparison]::Ordinal)
+          }
+          [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "accepted=$($accepted.ToString().ToLowerInvariant())`n", [Text.UTF8Encoding]::new($false))
+  review:
+    needs: check-command
+    if: needs.check-command.outputs.accepted == 'true'
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: ai-review-${{ github.repository }}-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    uses: jmygot/ten28-pr-reviewer/.github/workflows/review.yml@v0.1.0
+    secrets:
+      deepseek_api_key: ${{ secrets.DEEPSEEK_API_KEY }}

@@ -1,0 +1,20 @@
+# Visual Studio and .NET build output
+.vs/
+[Bb]in/
+[Oo]bj/
+[Aa]rtifacts/
+TestResults/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.nupkg
+*.snupkg
+
+# Local credentials and developer configuration
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+appsettings.*.local.json
+**/Properties/PublishProfiles/*.pubxml*

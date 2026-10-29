@@ -1,0 +1,46 @@
+name: Company PR Reviewer
+description: Run the trusted on-demand PR reviewer without checking out pull request code.
+inputs:
+  github-token:
+    description: Repository-scoped GitHub Actions token.
+    required: true
+  deepseek-api-key:
+    description: DeepSeek API key supplied by the caller repository.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Set up .NET 10
+      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      with:
+        dotnet-version: '10.0.x'
+    - name: Publish trusted worker
+      id: publish
+      shell: pwsh
+      working-directory: ${{ github.action_path }}
+      env:
+        REVIEWER_ACTION_PATH: ${{ github.action_path }}
+        REVIEWER_RELEASE_REF: ${{ github.action_ref }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        if ([string]::IsNullOrWhiteSpace($env:REVIEWER_RELEASE_REF)) {
+          throw 'The action requires a release identity; invoke it using a vetted tag or commit SHA.'
+        }
+        $project = Join-Path $env:REVIEWER_ACTION_PATH 'Ten28-PrReviewer/Ten28-PrReviewer.csproj'
+        $output = Join-Path $env:RUNNER_TEMP ('company-pr-reviewer-' + [guid]::NewGuid().ToString('N'))
+        $artifacts = Join-Path $output 'artifacts'
+        & dotnet publish $project --configuration Release --output $output --artifacts-path $artifacts --no-self-contained "-p:InformationalVersion=$env:REVIEWER_RELEASE_REF" '-p:IncludeSourceRevisionInInformationalVersion=false'
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $worker = Join-Path $output 'Ten28-PrReviewer.dll'
+        [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "worker-path=$worker`n", [Text.UTF8Encoding]::new($false))
+    - name: Run trusted worker
+      shell: pwsh
+      working-directory: ${{ github.action_path }}
+      env:
+        REVIEWER_WORKER_PATH: ${{ steps.publish.outputs.worker-path }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        DEEPSEEK_API_KEY: ${{ inputs.deepseek-api-key }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        & dotnet $env:REVIEWER_WORKER_PATH
+        exit $LASTEXITCODE

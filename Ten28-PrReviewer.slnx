@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Ten28-PrReviewer.Tests/Ten28-PrReviewer.Tests.csproj" />
+  <Project Path="Ten28-PrReviewer/Ten28-PrReviewer.csproj" />
+</Solution>

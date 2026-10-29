@@ -1,0 +1,25 @@
+name: Central PR Review
+
+on:
+  workflow_call:
+    secrets:
+      deepseek_api_key:
+        description: DeepSeek API key from the caller repository's Actions secret.
+        required: true
+
+permissions: {}
+
+jobs:
+  review:
+    if: github.event_name == 'issue_comment' && github.event.action == 'created' && github.event.issue.pull_request != null
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Execute centralized reviewer
+        uses: jmygot/ten28-pr-reviewer@v0.1.0
+        with:
+          github-token: ${{ github.token }}
+          deepseek-api-key: ${{ secrets.deepseek_api_key }}
