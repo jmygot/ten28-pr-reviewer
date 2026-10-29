@@ -13,6 +13,8 @@ public class ActionPackagingTests
 {
     private static readonly string Root = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(SourcePath())!, ".."));
     private const string CallerPath = ".github/workflows/ai-review.yml.example";
+    private const string RepositoryPattern = @"[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+";
+    private const string ReleasePattern = @"(?:v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?|[0-9a-fA-F]{40})";
 
     /// <summary>Checks automatic CI only builds, tests, and simulates reviews with read-only access and no secret handoff.</summary>
     [Fact]
@@ -104,7 +106,7 @@ public class ActionPackagingTests
         Assert.Equal("10", Text(job, "timeout-minutes"));
         AssertReviewPermissions(job);
         var step = Assert.Single(Sequence(job, "steps").Children);
-        Assert.Equal("jmygot/ten28-pr-reviewer@v0.1.0", Text(step, "uses"));
+        Assert.Matches(@"\A" + RepositoryPattern + "@" + ReleasePattern + @"\z", Text(step, "uses"));
         var arguments = Map(step, "with");
         Assert.Equal(new[] { "deepseek-api-key", "github-token" }, Keys(arguments));
         Assert.Equal("${{ github.token }}", Text(arguments, "github-token"));
@@ -139,7 +141,11 @@ public class ActionPackagingTests
         Assert.Equal("ai-review-${{ github.repository }}-${{ github.event.issue.number }}", Text(concurrency, "group"));
         Assert.Equal("false", Text(concurrency, "cancel-in-progress"));
         Assert.DoesNotContain(new YamlScalarNode("concurrency"), workflow.Children.Keys);
-        Assert.Equal("YOUR_USERNAME/company-pr-reviewer/.github/workflows/review.yml@v0.1.0", Text(review, "uses"));
+        var callerReference = Text(review, "uses");
+        Assert.Matches(@"\A" + RepositoryPattern + @"/\.github/workflows/review\.yml@" + ReleasePattern + @"\z", callerReference);
+        var centralJob = Map(Map(Read(".github/workflows/review.yml"), "jobs"), "review");
+        var centralReference = Text(Assert.Single(Sequence(centralJob, "steps").Children), "uses");
+        Assert.Equal(centralReference.Split('@')[0], callerReference[..callerReference.IndexOf("/.github/workflows/", StringComparison.Ordinal)]);
         Assert.Equal(new[] { "deepseek_api_key" }, Keys(Map(review, "secrets")));
         Assert.Equal("${{ secrets.DEEPSEEK_API_KEY }}", Text(Map(review, "secrets"), "deepseek_api_key"));
         foreach (var file in new[] { "action.yml", ".github/workflows/review.yml", CallerPath })
